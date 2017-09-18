@@ -1,0 +1,16 @@
+[package]
+name = "ceph-rpc"
+version = "0.1.0"
+authors = ["Chris Holcombe <xfactor973@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+keywords = ["ceph", "storage"]
+repository = "https://github.com/cholcombe973/ceph_rpc"
+homepage = "https://github.com/cholcombe973/ceph_rpc"
+documentation = "https://docs.rs/ceph_rpc"
+description = "Ceph RPC serialization"
+
+[dependencies]
+byteorder = "~1.1"
+log = "~0.3"
+nom = "~3.2"
