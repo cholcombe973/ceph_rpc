@@ -40,34 +40,21 @@ impl Serialize for EntityName {
     }
 }
 
-/// AKA Rust 2 tuple
-pub struct Pair<A: Serialize, B: Serialize> {
-    pub a: A,
-    pub b: B,
-}
-
-impl<A, B> Serialize for Pair<A, B>
+impl<A, B> Serialize for (A, B)
 where
     A: Serialize,
     B: Serialize,
 {
     fn serialize(&mut self) -> Result<Vec<u8>> {
         let mut bytes: Vec<u8> = Vec::new();
-        bytes.extend(self.a.serialize()?);
-        bytes.extend(self.b.serialize()?);
+        bytes.extend(self.0.serialize()?);
+        bytes.extend(self.1.serialize()?);
 
         Ok(bytes)
     }
 }
 
-/// AKA Rust 3 tuple
-pub struct Triple<A: Serialize, B: Serialize, C: Serialize> {
-    pub a: A,
-    pub b: B,
-    pub c: C,
-}
-
-impl<A, B, C> Serialize for Triple<A, B, C>
+impl<A, B, C> Serialize for (A, B, C)
 where
     A: Serialize,
     B: Serialize,
@@ -75,9 +62,9 @@ where
 {
     fn serialize(&mut self) -> Result<Vec<u8>> {
         let mut bytes: Vec<u8> = Vec::new();
-        bytes.extend(self.a.serialize()?);
-        bytes.extend(self.b.serialize()?);
-        bytes.extend(self.c.serialize()?);
+        bytes.extend(self.0.serialize()?);
+        bytes.extend(self.1.serialize()?);
+        bytes.extend(self.2.serialize()?);
 
         Ok(bytes)
     }
