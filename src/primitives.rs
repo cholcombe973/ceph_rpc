@@ -1,12 +1,17 @@
 extern crate byteorder;
 
-use std::io::{Result, Error};
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::io::{Cursor, Result};
 
-use self::byteorder::{LittleEndian, WriteBytesExt};
+use self::byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+
+static CEPH_AES_IV: &'static str = "cephsageyudagreg";
+static AUTH_ENC_MAGIC: u64 = 0xff009cad8826aa55;
 
 pub trait Serialize {
     /// Transform rust to ceph wire format
-    fn serialize(&mut self) -> Result<Vec<u8>>;
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()>;
 }
 
 /// Ceph utime
@@ -16,12 +21,10 @@ pub struct Utime {
 }
 
 impl Serialize for Utime {
-    fn serialize(&mut self) -> Result<Vec<u8>> {
-        let mut bytes: Vec<u8> = Vec::new();
-        bytes.write_u32::<LittleEndian>(self.tv_sec)?;
-        bytes.write_u32::<LittleEndian>(self.tv_nsec)?;
-
-        Ok(bytes)
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()> {
+        buff.write_u32::<LittleEndian>(self.tv_sec)?;
+        buff.write_u32::<LittleEndian>(self.tv_nsec)?;
+        Ok(())
     }
 }
 
@@ -31,41 +34,122 @@ pub struct EntityName {
 }
 
 impl Serialize for EntityName {
-    fn serialize(&mut self) -> Result<Vec<u8>> {
-        let mut bytes: Vec<u8> = Vec::new();
-        bytes.write_u8(self.ceph_type)?;
-        bytes.write_u64::<LittleEndian>(self.num)?;
-
-        Ok(bytes)
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()> {
+        buff.write_u8(self.ceph_type)?;
+        buff.write_u64::<LittleEndian>(self.num)?;
+        Ok(())
     }
 }
 
-impl<A, B> Serialize for (A, B)
+pub struct CephPair<A, B>
 where
     A: Serialize,
     B: Serialize,
 {
-    fn serialize(&mut self) -> Result<Vec<u8>> {
-        let mut bytes: Vec<u8> = Vec::new();
-        bytes.extend(self.0.serialize()?);
-        bytes.extend(self.1.serialize()?);
+    pub a: A,
+    pub b: B,
+}
 
-        Ok(bytes)
+impl<A, B> Serialize for CephPair<A, B>
+where
+    A: Serialize,
+    B: Serialize,
+{
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()> {
+        self.a.serialize(buff)?;
+        self.b.serialize(buff)?;
+        Ok(())
     }
 }
 
-impl<A, B, C> Serialize for (A, B, C)
+pub struct CephTriple<A, B, C>
 where
     A: Serialize,
     B: Serialize,
     C: Serialize,
 {
-    fn serialize(&mut self) -> Result<Vec<u8>> {
-        let mut bytes: Vec<u8> = Vec::new();
-        bytes.extend(self.0.serialize()?);
-        bytes.extend(self.1.serialize()?);
-        bytes.extend(self.2.serialize()?);
+    pub a: A,
+    pub b: B,
+    pub c: C,
+}
 
-        Ok(bytes)
+impl<A, B, C> Serialize for CephTriple<A, B, C>
+where
+    A: Serialize,
+    B: Serialize,
+    C: Serialize,
+{
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()> {
+        self.a.serialize(buff)?;
+        self.b.serialize(buff)?;
+        self.c.serialize(buff)?;
+        Ok(())
+    }
+}
+
+impl<A> Serialize for Vec<A>
+where
+    A: Serialize,
+{
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()> {
+        buff.write_u32::<LittleEndian>(self.len() as u32)?;
+        for item in self {
+            item.serialize(buff)?;
+        }
+        Ok(())
+    }
+}
+
+impl Serialize for str {
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()> {
+        buff.write_u32::<LittleEndian>(self.len() as u32)?;
+        buff.extend(self.as_bytes());
+        Ok(())
+    }
+}
+
+impl Serialize for String {
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()> {
+        buff.write_u32::<LittleEndian>(self.len() as u32)?;
+        buff.extend(self.as_bytes());
+        Ok(())
+    }
+}
+
+impl<T> Serialize for Option<T>
+where
+    T: Serialize,
+{
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()> {
+        //struct ceph_optional<T> {
+        //u8 present;
+        //T  element[present? 1 : 0]; // Only if present is non-zero.
+        match self {
+            &mut Some(ref mut t) => {
+                buff.write_u8(1)?;
+                t.serialize(buff)?;
+            }
+            &mut None => {
+                buff.write_u8(0)?;
+            }
+        };
+        Ok(())
+    }
+}
+
+impl<K, V> Serialize for HashMap<K, V>
+where
+    K: Clone + Eq + Hash + Serialize,
+    V: Serialize,
+{
+    fn serialize(&mut self, buff: &mut Vec<u8>) -> Result<()> {
+        buff.write_u32::<LittleEndian>(self.len() as u32)?;
+        for (k, v) in self {
+            // TODO: Why do i have to clone this?
+            let mut key = k.clone();
+            key.serialize(buff)?;
+            v.serialize(buff)?;
+        }
+        Ok(())
     }
 }
